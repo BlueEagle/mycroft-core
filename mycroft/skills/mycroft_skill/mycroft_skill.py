@@ -1052,7 +1052,7 @@ class MycroftSkill:
         re.compile(regex)  # validate regex
         self.intent_service.register_adapt_regex(regex)
 
-    def speak(self, utterance, expect_response=False, wait=False):
+    def speak(self, utterance, expect_response=False, wait=False, meta=None):
         """Speak a sentence.
 
         Arguments:
@@ -1062,11 +1062,13 @@ class MycroftSkill:
                                     speaking the utterance.
             wait (bool):            set to True to block while the text
                                     is being spoken.
+            meta:                   Information of what built the sentence.
         """
         # registers the skill as being active
         self.enclosure.register(self.name)
         data = {'utterance': utterance,
-                'expect_response': expect_response}
+                'expect_response': expect_response,
+                'meta': meta or {}}
         message = dig_for_message()
         m = message.forward("speak", data) if message \
             else Message("speak", data)
@@ -1090,7 +1092,7 @@ class MycroftSkill:
         """
         data = data or {}
         self.speak(self.dialog_renderer.render(key, data),
-                   expect_response, wait)
+                   expect_response, wait, meta={'dialog': key, 'data': data})
 
     def acknowledge(self):
         """Acknowledge a successful request.
