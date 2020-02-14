@@ -102,29 +102,13 @@ def _match_dialog_patterns(dialogs, sentence):
         return False, debug
 
 
-def match_dialog_patterns(dialogs, sentence):
-    """Match sentence against a list of dialog patterns.
-
-    Returns simple True/False and not index
-    """
-    index, debug = _match_dialog_patterns(dialogs, sentence)
-    return index is not False, debug
-
-
-def expected_dialog_check(utterance, skill_path, dialog):
-    """Check that expected dialog file is used. """
-    dialogs, load_debug = load_dialog_list(skill_path, dialog)
-    match, match_debug = match_dialog_patterns(dialogs, utterance)
-    return match, load_debug + match_debug
-
-
 @given('an english speaking user')
-def given_impl(context):
+def given_english(context):
     context.lang = 'en-us'
 
 
 @when('the user says "{text}"')
-def when_impl(context, text):
+def when_user_says(context, text):
     context.bus.emit(Message('recognizer_loop:utterance',
                              data={'utterances': [text],
                                    'lang': 'en-us',
@@ -133,11 +117,11 @@ def when_impl(context, text):
                              context={'client_name': 'mycroft_listener'}))
 
 
-def then_timeout(then_func, context, timeout=TIMEOUT):
+def then_wait(msg_type, then_func, context, timeout=TIMEOUT):
     count = 0
     debug = ''
     while count < TIMEOUT:
-        for message in context.speak_messages:
+        for message in context.bus.get_messages(msg_type):
             status, test_dbg = then_func(message)
             debug += test_dbg
             if status:
@@ -151,13 +135,11 @@ def then_timeout(then_func, context, timeout=TIMEOUT):
 
 @then('"{skill}" should reply with dialog from "{dialog}"')
 def then_dialog(context, skill, dialog):
-    skill_path = context.msm.find_skill(skill).path
-
     def check_dialog(message):
-        utt = message.data['utterance'].lower()
-        return expected_dialog_check(utt, skill_path, dialog)
+        utt_dialog = message.data.get('meta', {}).get('dialog')
+        return (utt_dialog == dialog.replace('.dialog', ''), '')
 
-    passed, debug = then_timeout(check_dialog, context)
+    passed, debug = then_wait('speak', check_dialog, context)
     if not passed:
         print(debug)
     assert passed
@@ -177,7 +159,7 @@ def then_anything(context, skill):
     def check_any_messages(message):
         return (True, '') if message else (False, '')
 
-    passed = then_timeout(check_any_messages, context)
+    passed = then_wait('speak', check_any_messages, context)
     if not passed:
         print('No speech recieved at all.')
     assert passed
@@ -190,7 +172,7 @@ def then_exactly(context, skill, text):
         debug = 'Comparing {} with expected {}\n'.format(utt, text)
         return (True, debug) if utt == text.lower() else (False, debug)
 
-    passed, debug = then_timeout(check_exact_match, context)
+    passed, debug = then_wait('speak', check_exact_match, context)
     if not passed:
         print(debug)
     assert passed
@@ -203,7 +185,7 @@ def then_contains(context, text):
         debug = 'Checking if "{}" contains "{}"\n'.format(utt, text)
         return (True, debug) if text.lower() in utt else (False, debug)
 
-    passed, debug = then_timeout(check_contains, context)
+    passed, debug = then_wait('speak', check_contains, context)
 
     if not passed:
         print('No speech contained the expected content')
@@ -211,7 +193,7 @@ def then_contains(context, text):
 
 
 @then('the user says "{text}"')
-def when_impl(context, text):
+def then_user_follow_up(context, text):
     time.sleep(2)
     wait_while_speaking()
     context.bus.emit(Message('recognizer_loop:utterance',
